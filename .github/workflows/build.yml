@@ -40,6 +40,8 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          # Anahtar yalnızca repo GİZLİ ise APK'ya gömülür; herkese açık repoda asla eklenmez
+          GEMINI_API_KEY: ${{ github.event.repository.private && secrets.GEMINI_API_KEY || '' }}
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: APK'yı adlandır

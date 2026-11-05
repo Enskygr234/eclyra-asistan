@@ -17,6 +17,9 @@ android {
         versionCode = vc
         versionName = "1.0.$vc"
         // Telefonlar ARM işlemcili; x86/mips kütüphanelerini atarak APK'yı küçült
+        // Kişisel derleme: GitHub Secrets'taki anahtar APK'ya gömülür (kodda yer almaz)
+        val gk = (System.getenv("GEMINI_API_KEY") ?: "").trim().replace("\"", "")
+        buildConfigField("String", "GEMINI_KEY", "\"$gk\"")
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 

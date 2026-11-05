@@ -68,7 +68,7 @@ fun SettingsScreen(
     fun bump() { tick++ }
     tick.let { } // okuyarak yeniden çizimi tetikler
 
-    var key by remember { mutableStateOf(p.apiKey) }
+    var key by remember { mutableStateOf(p.userKey) }
     var showKey by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf(p.userName) }
     var customModel by remember { mutableStateOf(if (p.model in Prefs.MODELS) "" else p.model) }
@@ -96,7 +96,7 @@ fun SettingsScreen(
                 OutlinedTextField(
                     value = key,
                     onValueChange = { key = it.trim(); p.apiKey = key },
-                    label = { Text("API anahtarı") },
+                    label = { Text(if (p.hasBuiltInKey) "API anahtarı (boş = gömülü anahtar)" else "API anahtarı") },
                     singleLine = true,
                     visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
@@ -109,6 +109,9 @@ fun SettingsScreen(
                         )
                     }
                 )
+                if (p.hasBuiltInKey && key.isBlank()) {
+                    Text("✓ Uygulamaya gömülü kişisel anahtar kullanılıyor", color = C.Ice, fontSize = 13.sp)
+                }
                 Link("Ücretsiz anahtar al (aistudio.google.com)") {
                     ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/apikey")))
                 }

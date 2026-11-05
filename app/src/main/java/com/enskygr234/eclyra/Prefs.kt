@@ -6,9 +6,17 @@ import org.json.JSONArray
 class Prefs(ctx: Context) {
     private val sp = ctx.applicationContext.getSharedPreferences("eclyra", Context.MODE_PRIVATE)
 
+    /** Kullanıcının girdiği anahtar; boşsa APK'ya gömülü kişisel anahtar kullanılır. */
     var apiKey: String
-        get() = sp.getString("api_key", "") ?: ""
+        get() = (sp.getString("api_key", "") ?: "").ifBlank { BuildConfig.GEMINI_KEY }
         set(v) { sp.edit().putString("api_key", v.trim()).apply() }
+
+    /** Sadece kullanıcının elle girdiği anahtar (ayarlar ekranı için). */
+    val userKey: String
+        get() = sp.getString("api_key", "") ?: ""
+
+    val hasBuiltInKey: Boolean
+        get() = BuildConfig.GEMINI_KEY.isNotBlank()
 
     var model: String
         get() = sp.getString("model", DEFAULT_MODEL) ?: DEFAULT_MODEL
