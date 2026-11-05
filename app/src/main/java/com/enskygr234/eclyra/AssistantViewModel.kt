@@ -13,6 +13,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.vosk.Model
+import org.vosk.Recognizer
+import org.vosk.android.RecognitionListener
+import org.vosk.android.SpeechService
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -43,6 +47,9 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app), VoiceIO.Call
     var hint by mutableStateOf<String?>(null)
         private set
 
+    /** MainActivity tarafından ayarlanır: Google ses penceresini açar. */
+    var onDialogNeeded: (() -> Unit)? = null
+
     private val history = mutableListOf<JSONObject>()
     private var job: Job? = null
     private var idSeq = 0L
@@ -62,16 +69,42 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app), VoiceIO.Call
             Phase.SPEAKING -> {
                 voice.stopSpeaking()
                 phase = Phase.IDLE
-                voice.startListening()
+                listen()
             }
             Phase.THINKING -> stopAll()
-            Phase.IDLE -> voice.startListening()
+            Phase.IDLE -> listen()
         }
     }
 
     fun startListening() {
         if (phase == Phase.THINKING) return
-        voice.startListening()
+        listen()
+    }
+
+    private fun listen() {
+        val dialog = onDialogNeeded
+        if (prefs.useDialog && dialog != null) {
+            voice.stopSpeaking()
+            phase = Phase.IDLE
+            dialog()
+        } else voice.startListening()
+    }
+
+    /** Google ses penceresinden gelen sonuç. */
+    fun onDialogResult(text: String?) {
+        if (text.isNullOrBlank()) {
+            hint = "Seni duyamadım, tekrar dener misin?"
+            return
+        }
+        hint = null
+        voiceTurn = true
+        submit(text, pendingImage)
+    }
+
+    override fun onNeedDialog() {
+        // Telefonun arka plan tanıması çalışmadı: bundan sonra Google penceresini kullan
+        prefs.useDialog = true
+        onDialogNeeded?.invoke()
     }
 
     fun stopAll() {
@@ -143,6 +176,80 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app), VoiceIO.Call
         }
     }
 
+    // ---------- uyandırma sözü testi ----------
+
+    var testing by mutableStateOf(false)
+        private set
+    var testHeard by mutableStateOf("")
+        private set
+    var testHit by mutableStateOf(false)
+        private set
+    private var testModel: Model? = null
+    private var testRec: Recognizer? = null
+    private var testSpeech: SpeechService? = null
+
+    fun startWakeTest() {
+        val ctx = getApplication<Application>()
+        if (testing || !WakeModel.ready(ctx)) return
+        voice.cancelListening()
+        testing = true
+        testHit = false
+        testHeard = "Ses modeli yükleniyor…"
+        viewModelScope.launch {
+            try {
+                val m = withContext(Dispatchers.IO) {
+                    testModel ?: Model(WakeModel.dir(ctx).absolutePath).also { testModel = it }
+                }
+                if (!testing) return@launch
+                val rec = Recognizer(m, 16000f)
+                testRec = rec
+                testSpeech = SpeechService(rec, 16000f).also { it.startListening(testListener) }
+                testHeard = "Şimdi \"Hey Eclyra\" de…"
+            } catch (e: Throwable) {
+                testHeard = "Test başlatılamadı: ${e.message}"
+                stopWakeTest()
+            }
+        }
+    }
+
+    fun stopWakeTest() {
+        testing = false
+        try {
+            testSpeech?.stop()
+            testSpeech?.shutdown()
+        } catch (_: Exception) {
+        }
+        testSpeech = null
+        try {
+            testRec?.close()
+        } catch (_: Exception) {
+        }
+        testRec = null
+    }
+
+    private fun onTestText(json: String?, key: String) {
+        val t = try {
+            JSONObject(json ?: return).optString(key)
+        } catch (e: Exception) {
+            return
+        }
+        if (t.isBlank()) return
+        testHeard = t
+        if (WakeModel.isWake(t)) testHit = true
+    }
+
+    private val testListener = object : RecognitionListener {
+        override fun onPartialResult(hypothesis: String?) = onTestText(hypothesis, "partial")
+        override fun onResult(hypothesis: String?) = onTestText(hypothesis, "text")
+        override fun onFinalResult(hypothesis: String?) = onTestText(hypothesis, "text")
+        override fun onError(exception: Exception?) {
+            testHeard = "Mikrofon hatası: ${exception?.message}"
+            stopWakeTest()
+        }
+
+        override fun onTimeout() = stopWakeTest()
+    }
+
     fun clearChat() {
         stopAll()
         messages.clear()
@@ -187,7 +294,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app), VoiceIO.Call
         if (phase == Phase.SPEAKING) {
             phase = Phase.IDLE
             val last = messages.lastOrNull { it.role == Role.ASSISTANT }?.text?.trim().orEmpty()
-            if (voiceTurn && prefs.autoContinue && last.endsWith("?")) voice.startListening()
+            if (voiceTurn && prefs.autoContinue && last.endsWith("?")) listen()
         }
     }
 
@@ -374,6 +481,11 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app), VoiceIO.Call
     }
 
     override fun onCleared() {
+        stopWakeTest()
+        try {
+            testModel?.close()
+        } catch (_: Exception) {
+        }
         voice.release()
         super.onCleared()
     }

@@ -5,7 +5,9 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.content.ComponentName
 import android.speech.RecognitionListener
+import android.speech.RecognitionService
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
@@ -23,6 +25,8 @@ class VoiceIO(private val ctx: Context, private val cb: Callback) {
         fun onListenEnd(error: String?)
         fun onSpeakStart()
         fun onSpeakDone()
+        /** Arka plan ses tanıma çalışmadı; Google'ın ses penceresiyle denenmeli. */
+        fun onNeedDialog()
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -64,14 +68,30 @@ class VoiceIO(private val ctx: Context, private val cb: Callback) {
 
     fun available() = SpeechRecognizer.isRecognitionAvailable(ctx)
 
+    /** Türkçeyi en iyi tanıyan Google hizmetini tercih et (Samsung/Xiaomi varsayılanları çoğu zaman Türkçe desteklemiyor). */
+    private fun preferredService(): ComponentName? = try {
+        @Suppress("DEPRECATION")
+        val list = ctx.packageManager.queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)
+        val order = listOf("com.google.android.googlequicksearchbox", "com.google.android.tts", "com.google.android.as")
+        val best = order.firstNotNullOfOrNull { pkg -> list.firstOrNull { it.serviceInfo.packageName == pkg } }
+        best?.let { ComponentName(it.serviceInfo.packageName, it.serviceInfo.name) }
+    } catch (e: Exception) {
+        null
+    }
+
+    private var failures = 0
+
     fun startListening() = main.post {
         stopSpeaking()
         if (!available()) {
-            cb.onListenEnd("Bu telefonda ses tanıma hizmeti yok. Google uygulamasını yükleyip güncelle.")
+            cb.onListenEnd(null)
+            cb.onNeedDialog()
             return@post
         }
         if (recognizer == null) {
-            recognizer = SpeechRecognizer.createSpeechRecognizer(ctx).also { it.setRecognitionListener(listener) }
+            val comp = preferredService()
+            recognizer = (if (comp != null) SpeechRecognizer.createSpeechRecognizer(ctx, comp)
+            else SpeechRecognizer.createSpeechRecognizer(ctx)).also { it.setRecognitionListener(listener) }
         }
         val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -86,7 +106,8 @@ class VoiceIO(private val ctx: Context, private val cb: Callback) {
             recognizer?.startListening(i)
         } catch (e: Exception) {
             listening = false
-            cb.onListenEnd("Mikrofon başlatılamadı")
+            cb.onListenEnd(null)
+            cb.onNeedDialog()
         }
     }
 
@@ -114,25 +135,34 @@ class VoiceIO(private val ctx: Context, private val cb: Callback) {
 
         override fun onError(error: Int) {
             listening = false
-            val msg = when (error) {
-                SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> null
-                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Mikrofon izni yok"
-                SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Ses tanıma için internet gerekiyor"
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Mikrofon meşgul, tekrar dene"
-                SpeechRecognizer.ERROR_CLIENT -> null
-                else -> "Seni duyamadım (hata $error)"
+            val quiet = error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+            val msg = when {
+                quiet -> "Seni duyamadım, küreye dokunup tekrar konuş"
+                error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Mikrofon izni yok"
+                error == SpeechRecognizer.ERROR_NETWORK || error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
+                    "Ses tanıma için internet gerekiyor"
+                else -> null
             }
-            if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT) {
-                recognizer?.destroy()
-                recognizer = null
+            recognizer?.destroy()
+            recognizer = null
+            if (quiet || msg != null) {
+                failures = 0
+                cb.onListenEnd(msg)
+                return
             }
-            cb.onListenEnd(msg)
+            // Dil desteklenmiyor (12/13), istemci/sunucu hatası vb.: Google ses penceresine geç
+            failures++
+            cb.onListenEnd(null)
+            cb.onNeedDialog()
         }
 
         override fun onResults(results: Bundle?) {
             listening = false
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-            if (text.isBlank()) cb.onListenEnd(null) else cb.onFinal(text)
+            if (text.isBlank()) cb.onListenEnd("Seni duyamadım, tekrar dener misin?") else {
+                failures = 0
+                cb.onFinal(text)
+            }
         }
 
         override fun onPartialResults(partialResults: Bundle?) {

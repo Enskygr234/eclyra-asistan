@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.speech.RecognizerIntent
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -66,6 +67,23 @@ class MainActivity : ComponentActivity() {
         if (!ok) Toast.makeText(this, "SMS izni verilmedi, mesajlar ekranda hazırlanacak", Toast.LENGTH_LONG).show()
     }
 
+    private val speechDialog = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        val text = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (r.resultCode == RESULT_OK) vm.onDialogResult(text)
+    }
+
+    private fun openSpeechDialog() {
+        val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "tr-TR")
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Eclyra dinliyor…")
+        try {
+            speechDialog.launch(i)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ses tanıma bulunamadı. Play Store'dan \"Google\" uygulamasını yükle/güncelle.", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private val takePicture = registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val u = photoUri
         if (ok && u != null) loadImage(u)
@@ -77,6 +95,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        vm.onDialogNeeded = { openSpeechDialog() }
         setContent {
             EclyraTheme {
                 BackHandler(enabled = screen != "chat") { screen = "chat" }
@@ -106,6 +125,11 @@ class MainActivity : ComponentActivity() {
             permLauncher.launch(basePermissions)
         }
         handleIntent(intent)
+    }
+
+    override fun onDestroy() {
+        vm.onDialogNeeded = null
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -153,6 +177,7 @@ class MainActivity : ComponentActivity() {
         showOverLock(false)
         if (!isChangingConfigurations) {
             vm.stopListeningOnly()
+            vm.stopWakeTest()
             if (vm.prefs.wakeWord) WakeWordService.send(this, WakeWordService.ACTION_RESUME)
         }
     }

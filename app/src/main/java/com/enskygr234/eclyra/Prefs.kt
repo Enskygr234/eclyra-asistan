@@ -38,6 +38,11 @@ class Prefs(ctx: Context) {
         get() = sp.getFloat("speech_rate", 1.0f)
         set(v) { sp.edit().putFloat("speech_rate", v).apply() }
 
+    /** Telefonun arka plan ses tanıması Türkçe çalışmıyorsa Google'ın ses penceresi kullanılır. */
+    var useDialog: Boolean
+        get() = sp.getBoolean("use_dialog", false)
+        set(v) { sp.edit().putBoolean("use_dialog", v).apply() }
+
     var askedPermissions: Boolean
         get() = sp.getBoolean("asked_perms", false)
         set(v) { sp.edit().putBoolean("asked_perms", v).apply() }

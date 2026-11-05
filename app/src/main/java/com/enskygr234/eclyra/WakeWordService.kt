@@ -84,14 +84,17 @@ object WakeModel {
         if (!ready(ctx)) throw IllegalStateException("Model dosyaları eksik")
     }
 
-    private val PATTERNS = listOf(
-        "eklira", "ek lira", "eklıra", "ek lıra", "heklira", "hey lira", "ekleyra", "ek leyra",
-        "eklera", "ek lera", "ekl ira", "eclyra", "eklir a", "ek dira", "hey ek"
+    // Küçük Türkçe model "Eclyra"yı sözlüğünde bilmediği için ona en yakın sesleri yazar
+    private val STEMS = listOf(
+        "eklira", "eklıra", "ekleyra", "eklera", "eklara", "ekilira", "ekiira", "eklir", "klira", "kılıra",
+        "eklayra", "ekleyre", "eklere", "heyekl", "heyekil", "hey ek", "eklyra", "eclyra"
     )
 
     fun isWake(text: String): Boolean {
-        val t = " " + text.lowercase(Locale("tr", "TR")).replace(Regex("\\s+"), " ") + " "
-        return PATTERNS.any { t.contains(it) }
+        val low = text.lowercase(Locale("tr", "TR")).replace(Regex("\\s+"), " ").trim()
+        if (low.isEmpty()) return false
+        val glued = low.replace(" ", "")
+        return STEMS.any { st -> if (st.contains(' ')) " $low ".contains(" $st") else glued.contains(st) }
     }
 }
 

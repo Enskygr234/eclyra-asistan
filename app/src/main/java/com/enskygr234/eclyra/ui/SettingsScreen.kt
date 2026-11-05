@@ -172,6 +172,27 @@ fun SettingsScreen(
                     LinearProgressIndicator(progress = { pr }, modifier = Modifier.fillMaxWidth(), color = C.Ice)
                 }
                 vm.wakeError?.let { Text(it, color = C.Error, fontSize = 13.sp) }
+                if (vm.wakeOn && vm.wakeProgress == null) {
+                    // Uyandırma testi: modelin ne duyduğunu canlı gösterir
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(C.Night)
+                            .padding(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Uyandırma testi", color = C.Text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                            OutlinedButton(onClick = { if (vm.testing) vm.stopWakeTest() else vm.startWakeTest() }) {
+                                Text(if (vm.testing) "Durdur" else "Başlat")
+                            }
+                        }
+                        if (vm.testing || vm.testHeard.isNotEmpty()) {
+                            Text("Duyduğum: ${vm.testHeard}", color = C.Muted, fontSize = 13.sp)
+                            if (vm.testHit) Text("✓ \"Hey Eclyra\" algılandı!", color = C.Ice, fontSize = 14.sp)
+                        }
+                    }
+                }
                 if (vm.wakeOn) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -204,6 +225,11 @@ fun SettingsScreen(
             }
 
             Section("Ses") {
+                Toggle(
+                    "Google ses penceresini kullan",
+                    "Mikrofon seni duymuyorsa aç. Konuşurken Google'ın ses penceresi açılır; çoğu telefonda daha sağlam çalışır.",
+                    p.useDialog
+                ) { p.useDialog = it; bump() }
                 Toggle("Sohbete devam et", "Soru sorduğumda cevabını otomatik dinlerim.", p.autoContinue) {
                     p.autoContinue = it; bump()
                 }
