@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- hilal: açık daire + üstüne arka plan renginde kayık daire -->
+    <path android:fillColor="#C4B5FD" android:pathData="M28,54a24,24 0 1,0 48,0a24,24 0 1,0 -48,0z" />
+    <path android:fillColor="#140B2E" android:pathData="M42,48a21,21 0 1,0 42,0a21,21 0 1,0 -42,0z" />
+    <!-- ses dalgaları -->
+    <path android:fillColor="#67E8F9" android:pathData="M45,49h3v10h-3z" />
+    <path android:fillColor="#67E8F9" android:pathData="M50.5,44h3v20h-3z" />
+    <path android:fillColor="#67E8F9" android:pathData="M56,47h3v14h-3z" />
+    <!-- yıldız -->
+    <path android:fillColor="#FFFFFF" android:pathData="M76,30l1.6,3.6l3.6,1.6l-3.6,1.6l-1.6,3.6l-1.6,-3.6l-3.6,-1.6l3.6,-1.6z" />
+</vector>
