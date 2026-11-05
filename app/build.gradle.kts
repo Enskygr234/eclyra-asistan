@@ -16,6 +16,8 @@ android {
         targetSdk = 34
         versionCode = vc
         versionName = "1.0.$vc"
+        // Telefonlar ARM işlemcili; x86/mips kütüphanelerini atarak APK'yı küçült
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     signingConfigs {
