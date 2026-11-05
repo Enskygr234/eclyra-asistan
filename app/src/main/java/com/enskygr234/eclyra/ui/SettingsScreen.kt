@@ -250,10 +250,10 @@ fun SettingsScreen(
 }
 
 private fun modelNote(m: String) = when (m) {
-    "gemini-flash-latest" -> "Önerilen · her zaman en yeni Flash"
-    "gemini-3.6-flash" -> "Sabit sürüm"
+    "gemini-flash-lite-latest" -> "Varsayılan · en hızlı, kotası en geniş"
+    "gemini-3.5-flash-lite" -> "Lite, sabit sürüm"
+    "gemini-flash-latest" -> "Daha akıllı, zor sorular için"
     "gemini-2.5-flash" -> "Eski ama kararlı"
-    "gemini-flash-lite-latest" -> "En hızlı, kota dostu"
     else -> ""
 }
 

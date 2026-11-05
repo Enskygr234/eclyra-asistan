@@ -56,12 +56,12 @@ class Prefs(ctx: Context) {
         set(v) { sp.edit().putString("facts", JSONArray(v).toString()).apply() }
 
     companion object {
-        const val DEFAULT_MODEL = "gemini-flash-latest"
+        const val DEFAULT_MODEL = "gemini-flash-lite-latest"
         val MODELS = listOf(
+            "gemini-flash-lite-latest",
+            "gemini-3.5-flash-lite",
             "gemini-flash-latest",
-            "gemini-3.6-flash",
-            "gemini-2.5-flash",
-            "gemini-flash-lite-latest"
+            "gemini-2.5-flash"
         )
     }
 }
