@@ -20,6 +20,10 @@
 | 📱 **Telefon kontrolü** | Uygulama açma, fener, ses seviyesi, müzik kontrolü, ayar sayfaları |
 | 📚 **Ders yardımcısı** | Sorunun fotoğrafını çek, adım adım çözsün |
 | 🧠 **Hafıza** | "Bunu hatırla: …" dediğin bilgileri sonraki sohbetlerde kullanır |
+| 🔎 **Güncel bilgi** | Haber, maç skoru, döviz, nöbetçi eczane… Google'da araştırıp kaynağıyla söyler |
+| 🗣️ **Doğal ses** | Gemini'nin insan gibi konuşan sesi, 8 farklı ses seçeneği |
+| 🔔 **Bildirimler** | "Son mesajlarımı oku", mesajlara uygulamayı açmadan sesle cevap, gelen mesajları sesli duyurma |
+| 💬 **Sohbet geçmişi** | Sohbetler kaydedilir, eski sohbete dönüp devam edilebilir |
 
 ## Kurulum
 

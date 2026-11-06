@@ -51,6 +51,18 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("use_dialog", false)
         set(v) { sp.edit().putBoolean("use_dialog", v).apply() }
 
+    var naturalVoice: Boolean
+        get() = sp.getBoolean("natural_voice", true)
+        set(v) { sp.edit().putBoolean("natural_voice", v).apply() }
+
+    var voiceName: String
+        get() = sp.getString("voice_name", "Kore") ?: "Kore"
+        set(v) { sp.edit().putString("voice_name", v).apply() }
+
+    var announceMessages: Boolean
+        get() = sp.getBoolean("announce_messages", false)
+        set(v) { sp.edit().putBoolean("announce_messages", v).apply() }
+
     var askedPermissions: Boolean
         get() = sp.getBoolean("asked_perms", false)
         set(v) { sp.edit().putBoolean("asked_perms", v).apply() }

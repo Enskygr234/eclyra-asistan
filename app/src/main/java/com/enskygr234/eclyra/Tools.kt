@@ -127,7 +127,9 @@ class Tools(private val ctx: Context, private val prefs: Prefs) {
         f.put(fn("play_music", "Şarkı, sanatçı ya da video arar ve çalar.",
             listOf(s("query", "Ne çalınacak"), s("app", "youtube, spotify, youtube_music ya da varsayilan")),
             listOf("query")))
-        f.put(fn("web_search", "Tarayıcıda Google araması açar.", listOf(s("query", "Arama")), listOf("query")))
+        f.put(fn("web_lookup", "Google'da araştırıp güncel bilgiyi bulur ve özetler: haberler, maç skorları, döviz/altın, fiyatlar, nöbetçi eczane, etkinlikler, güncel her şey.",
+            listOf(s("query", "Ne araştırılacak; yer ve zaman bilgisini de ekle")), listOf("query")))
+        f.put(fn("web_search", "Kullanıcı özellikle tarayıcıda açmak isterse Google aramasını tarayıcıda açar.", listOf(s("query", "Arama")), listOf("query")))
         f.put(fn("open_url", "Bir web adresini açar.", listOf(s("url", "Adres")), listOf("url")))
         f.put(fn("add_calendar_event", "Takvime etkinlik ekleme ekranını doldurup açar.",
             listOf(s("title", "Başlık"), s("start", "yyyy-MM-ddTHH:mm"), s("end", "yyyy-MM-ddTHH:mm, boşsa 1 saat"),
@@ -136,6 +138,14 @@ class Tools(private val ctx: Context, private val prefs: Prefs) {
         f.put(fn("open_settings", "Telefon ayarlarının bir sayfasını açar.",
             listOf(s("page", "wifi, bluetooth, internet, ses, ekran, pil, konum, uygulamalar, bildirimler ya da genel")),
             listOf("page")))
+        f.put(fn("read_notifications", "Telefona gelen son bildirimleri/mesajları okur (WhatsApp, SMS, Instagram, e-posta vb.).",
+            listOf(s("app", "Sadece bu uygulamanınkiler, ör. whatsapp. Boşsa hepsi."),
+                s("from", "Sadece bu kişiden/başlıktan gelenler"),
+                i("count", "Kaç tane, varsayılan 5"),
+                b("only_messages", "Sadece mesajlaşma uygulamaları"))))
+        f.put(fn("reply_notification", "Bir mesaj bildirimine uygulamayı açmadan cevap gönderir. Önce kullanıcıdan onay al.",
+            listOf(i("id", "read_notifications'tan gelen bildirim numarası"), s("message", "Gönderilecek cevap")),
+            listOf("id", "message")))
         f.put(fn("device_info", "Pil yüzdesi, şarj durumu, internet bağlantısı, tarih ve saat bilgisini verir."))
         f.put(fn("remember_fact", "Kullanıcının hatırlamanı istediği kalıcı bir bilgiyi kaydeder.",
             listOf(s("fact", "Kaydedilecek bilgi")), listOf("fact")))
@@ -176,6 +186,7 @@ class Tools(private val ctx: Context, private val prefs: Prefs) {
         "set_volume" -> volume(a)
         "media_control" -> media(a)
         "play_music" -> playMusic(a)
+        "web_lookup" -> webLookup(a)
         "web_search" -> {
             val q = a.optString("query")
             start(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + enc(q))))
@@ -190,6 +201,8 @@ class Tools(private val ctx: Context, private val prefs: Prefs) {
         "add_calendar_event" -> calendar(a)
         "open_settings" -> openSettings(a)
         "device_info" -> deviceInfo()
+        "read_notifications" -> readNotifications(a)
+        "reply_notification" -> replyNotification(a)
         "remember_fact" -> {
             val fact = a.optString("fact").trim()
             if (fact.isEmpty()) throw ToolError("Kaydedilecek bilgi boş")
@@ -651,6 +664,36 @@ class Tools(private val ctx: Context, private val prefs: Prefs) {
         return ok("Haritada aranıyor", "🗺️ Yakındaki: $q")
     }
 
+    // ---------- güncel bilgi (Google arama ile) ----------
+
+    private fun webLookup(a: JSONObject): ToolResult {
+        val q = a.optString("query").trim()
+        if (q.isEmpty()) throw ToolError("Ne arayacağım belli değil")
+        val now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("d MMMM yyyy EEEE HH:mm", TR))
+        val prompt = "Şu an $now (Türkiye). Aşağıdakini Google'da araştır ve en güncel bilgiyle Türkçe, kısa ve net cevapla. " +
+            "Sayıları, saatleri ve tarihleri açıkça yaz. Emin olmadığın şeyi uydurma.\n\nSoru: $q"
+        val contents = JSONArray().put(
+            JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", prompt)))
+        )
+        val tools = JSONArray().put(JSONObject().put("google_search", JSONObject()))
+        val resp = Gemini.generateAuto(prefs, null, contents, tools)
+        val answer = Gemini.textOf(resp)
+        if (answer.isEmpty()) throw ToolError("Aramadan sonuç çıkmadı")
+        val sources = JSONArray()
+        val names = mutableListOf<String>()
+        resp.optJSONArray("candidates")?.optJSONObject(0)?.optJSONObject("groundingMetadata")
+            ?.optJSONArray("groundingChunks")?.let { ch ->
+                for (k in 0 until minOf(ch.length(), 4)) {
+                    val w = ch.getJSONObject(k).optJSONObject("web") ?: continue
+                    val title = w.optString("title")
+                    sources.put(JSONObject().put("title", title).put("url", w.optString("uri")))
+                    if (title.isNotBlank()) names += title
+                }
+            }
+        val note = "🔎 Google: $q" + if (names.isNotEmpty()) "\nKaynak: " + names.distinct().take(3).joinToString(", ") else ""
+        return ToolResult(JSONObject().put("answer", answer).put("sources", sources), note)
+    }
+
     // ---------- uygulamalar / cihaz ----------
 
     private fun openApp(a: JSONObject): ToolResult {
@@ -778,6 +821,53 @@ class Tools(private val ctx: Context, private val prefs: Prefs) {
         if (action == Settings.ACTION_APP_NOTIFICATION_SETTINGS) i.putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
         start(i)
         return ok("Ayarlar açıldı", "⚙️ Ayarlar: ${a.getString("page")}")
+    }
+
+    // ---------- bildirimler ----------
+
+    private fun needNotifAccess() {
+        if (!NotifListener.hasAccess(ctx))
+            throw ToolError("Bildirimleri okuma izni yok. Ayarlar > Bildirimler kısmından \"Bildirim erişimi ver\" ile açılabilir.")
+    }
+
+    private fun ago(t: Long): String {
+        val m = ((System.currentTimeMillis() - t) / 60_000).toInt()
+        return when {
+            m < 1 -> "az önce"
+            m < 60 -> "$m dk önce"
+            m < 1440 -> "${m / 60} sa önce"
+            else -> "${m / 1440} gün önce"
+        }
+    }
+
+    private fun readNotifications(a: JSONObject): ToolResult {
+        needNotifAccess()
+        val app = normTr(a.optString("app"))
+        val from = normTr(a.optString("from"))
+        val count = a.optInt("count", 5).coerceIn(1, 20)
+        val onlyMsg = a.optBoolean("only_messages", false)
+        val list = NotifListener.recent().filter { n ->
+            (!onlyMsg || n.pkg in NotifListener.MESSAGING) &&
+                (app.isEmpty() || normTr(n.app).contains(app) || n.pkg.contains(app.replace(" ", ""))) &&
+                (from.isEmpty() || normTr(n.title).contains(from))
+        }.take(count)
+        val arr = JSONArray()
+        list.forEach {
+            arr.put(
+                JSONObject().put("id", it.id).put("app", it.app).put("title", it.title)
+                    .put("text", it.text.take(500)).put("when", ago(it.time)).put("can_reply", it.reply != null)
+            )
+        }
+        val note = if (list.isEmpty()) "🔔 Uygun bildirim yok" else "🔔 ${list.size} bildirim okundu"
+        return ToolResult(JSONObject().put("notifications", arr).put("count", arr.length()), note)
+    }
+
+    private fun replyNotification(a: JSONObject): ToolResult {
+        needNotifAccess()
+        val item = NotifListener.find(a.getInt("id")) ?: throw ToolError("Bu bildirim artık yok")
+        val msg = a.getString("message")
+        NotifListener.reply(ctx, item, msg)
+        return ok("Cevap gönderildi", "↩️ ${item.app} · ${item.title}: $msg")
     }
 
     private fun deviceInfo(): ToolResult {

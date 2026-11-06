@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.enskygr234.eclyra.AssistantViewModel
 import com.enskygr234.eclyra.BuildConfig
+import com.enskygr234.eclyra.NaturalVoice
 import com.enskygr234.eclyra.Prefs
 import com.enskygr234.eclyra.R
 
@@ -60,6 +61,7 @@ fun SettingsScreen(
     onRequestPermissions: () -> Unit,
     onRequestSms: () -> Unit,
     overlayGranted: Boolean,
+    notifAccess: Boolean,
 ) {
     val ctx = LocalContext.current
     val p = vm.prefs
@@ -229,6 +231,33 @@ fun SettingsScreen(
 
             Section("Ses") {
                 Toggle(
+                    "Doğal ses (Gemini)",
+                    "İnsan gibi konuşan yapay zekâ sesi. Kapalıysa telefonun kendi sesi kullanılır. Kota dolarsa kendiliğinden telefonun sesine geçer.",
+                    p.naturalVoice
+                ) { p.naturalVoice = it; bump() }
+                if (p.naturalVoice) {
+                    Text("Ses seçimi", color = C.Muted, fontSize = 13.sp)
+                    NaturalVoice.VOICES.forEach { (v, desc) ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { p.voiceName = v; bump() },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = p.voiceName == v,
+                                onClick = { p.voiceName = v; bump() },
+                                colors = RadioButtonDefaults.colors(selectedColor = C.Violet)
+                            )
+                            Text(v, color = C.Text, fontSize = 14.sp, modifier = Modifier.width(80.dp))
+                            Text(desc, color = C.Muted, fontSize = 12.sp)
+                        }
+                    }
+                }
+                OutlinedButton(onClick = { vm.previewVoice() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Sesi dinle")
+                }
+                Toggle(
                     "Google ses penceresini kullan",
                     "Mikrofon seni duymuyorsa aç. Konuşurken Google'ın ses penceresi açılır; çoğu telefonda daha sağlam çalışır.",
                     p.useDialog
@@ -245,6 +274,38 @@ fun SettingsScreen(
                     onValueChange = { p.speechRate = (it * 10).toInt() / 10f; bump() },
                     valueRange = 0.6f..1.8f
                 )
+            }
+
+            Section("Bildirimler") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (notifAccess) "✓ Bildirimleri okuyabiliyorum. \"Son mesajlarımı oku\" ya da \"Ahmet ne yazmış?\" diyebilirsin."
+                        else "\"Son mesajlarımı oku\" ve mesajlara sesle cevap için bildirim erişimi ver.",
+                        color = if (notifAccess) C.Ice else C.Muted, fontSize = 13.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (!notifAccess) {
+                        OutlinedButton(onClick = {
+                            ctx.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                        }) { Text("Erişim ver") }
+                    }
+                }
+                if (!notifAccess) {
+                    Text(
+                        "Listede Eclyra gri/kısıtlı görünürse: Ayarlar > Uygulamalar > Eclyra > sağ üstteki ⋮ > \"Kısıtlanmış ayarlara izin ver\", sonra tekrar dene.",
+                        color = C.Muted, fontSize = 12.sp
+                    )
+                }
+                Toggle(
+                    "Gelen mesajları sesli oku",
+                    "Eclyra kapalıyken WhatsApp, SMS, Telegram vb. mesajlar gelince kimden geldiğini ve mesajı sesli okur.",
+                    p.announceMessages
+                ) { p.announceMessages = it; bump() }
+            }
+
+            Section("Sohbet geçmişi") {
+                Text("Sohbetler sadece bu telefonda saklanır. Üstteki saat simgesinden eski sohbetlere dönebilirsin.", color = C.Muted, fontSize = 13.sp)
+                Link("Tüm sohbetleri sil") { vm.deleteAllChats() }
             }
 
             Section("Telefon") {

@@ -250,11 +250,64 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app), VoiceIO.Call
         override fun onTimeout() = stopWakeTest()
     }
 
-    fun clearChat() {
+    // ---------- sohbet geçmişi ----------
+
+    private var chatId: String? = null
+    var chatList by mutableStateOf(listOf<ChatMeta>())
+        private set
+
+    fun refreshChats() {
+        chatList = ChatStore.list(getApplication())
+    }
+
+    private fun saveChat() {
+        val id = chatId ?: return
+        try {
+            ChatStore.save(getApplication(), id, messages.toList(), history.toList())
+        } catch (_: Exception) {
+        }
+    }
+
+    fun newChat() {
         stopAll()
+        saveChat()
         messages.clear()
         history.clear()
+        pendingImage = null
+        hint = null
+        chatId = null
     }
+
+    fun openChat(id: String) {
+        stopAll()
+        saveChat()
+        val data = ChatStore.load(getApplication(), id) ?: return
+        messages.clear()
+        messages.addAll(data.first)
+        history.clear()
+        history.addAll(data.second)
+        idSeq = (messages.maxOfOrNull { it.id } ?: 0L)
+        chatId = id
+        hint = null
+    }
+
+    fun deleteChat(id: String) {
+        ChatStore.delete(getApplication(), id)
+        if (id == chatId) {
+            chatId = null
+            newChat()
+        }
+        refreshChats()
+    }
+
+    fun deleteAllChats() {
+        ChatStore.deleteAll(getApplication())
+        chatId = null
+        newChat()
+        refreshChats()
+    }
+
+    fun clearChat() = newChat()
 
     // ---------- VoiceIO geri çağrıları ----------
 
@@ -306,6 +359,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app), VoiceIO.Call
             return
         }
         pendingImage = null
+        if (chatId == null) chatId = ChatStore.newId()
         val shown = text.ifEmpty { "Bu soruyu adım adım çöz." }
         add(Role.USER, shown, image)
 
@@ -377,33 +431,38 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app), VoiceIO.Call
             trimBrokenTail()
         } finally {
             compactHistory()
+            saveChat()
             if (phase == Phase.THINKING) phase = Phase.IDLE
         }
 
         if (finalText.isNotEmpty() && (voiceTurn || prefs.speakTyped)) {
             phase = Phase.SPEAKING
-            voice.speak(finalText, prefs.speechRate)
+            speak(finalText)
         }
+    }
+
+    private fun speak(text: String) {
+        if (prefs.naturalVoice && prefs.apiKey.isNotBlank()) {
+            voice.speakNatural(text, prefs.speechRate, prefs.apiKey, prefs.voiceName)
+        } else voice.speak(text, prefs.speechRate)
+    }
+
+    /** Ayarlarda sesi denemek için. */
+    fun previewVoice() {
+        voiceTurn = false
+        phase = Phase.SPEAKING
+        val name = prefs.userName.ifBlank { null }
+        speak("Merhaba${if (name != null) " $name" else ""}! Ben Eclyra. Sesim böyle, beğendin mi?")
+    }
+
+    override fun onNotice(msg: String) {
+        hint = msg
     }
 
     private fun callModel(): JSONObject {
         val contents = JSONArray()
         history.forEach { contents.put(it) }
-        val first = prefs.model.ifBlank { Prefs.DEFAULT_MODEL }
-        val order = listOf(first) + Prefs.MODELS.filter { it != first }
-        var last: Throwable? = null
-        for (m in order) {
-            try {
-                val r = Gemini.generate(prefs.apiKey, m, systemPrompt(), contents, tools.declarations())
-                if (m != first) prefs.model = m
-                return r
-            } catch (e: GeminiException) {
-                last = e
-                // model yoksa / desteklenmiyorsa sıradakini dene; diğer hatalarda dur
-                if (e.code != 404) throw e
-            }
-        }
-        throw last ?: GeminiException("Model bulunamadı", 404)
+        return Gemini.generateAuto(prefs, systemPrompt(), contents, tools.declarations())
     }
 
     private fun trimBrokenTail() {
@@ -464,7 +523,8 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app), VoiceIO.Call
             appendLine("- Mesajda ya da aramada kişi belirsizse ya da araç birden fazla kişi döndürürse hangisi olduğunu sor.")
             appendLine("- Mesaj içeriği belli değilse kullanıcının söylediğini doğal bir mesaja çevir.")
             appendLine("- Bir araç hata verirse nedenini kısaca söyle ve çözüm öner.")
-            appendLine("- Bilmediğin güncel bilgiler için uydurma; gerekirse web_search ile aramayı aç.")
+            appendLine("- Güncel bilgi gereken her soruda (haber, maç skoru, döviz/altın, fiyat, nöbetçi eczane, etkinlik, son gelişmeler, 'şu an' ile ilgili her şey) uydurma; web_lookup aracıyla Google'da araştır, cevabı kısaca söyle ve kaynağın adını an.")
+            appendLine("- Kullanıcı bildirimlerini/mesajlarını sorarsa read_notifications kullan. Bir bildirime cevap göndermeden önce göndereceğin mesajı kullanıcıya söyleyip onay al, onay gelince reply_notification kullan.")
             appendLine("- Kullanıcı bir şeyi hatırlamanı isterse remember_fact kullan.")
             if (facts.isNotEmpty()) {
                 appendLine()

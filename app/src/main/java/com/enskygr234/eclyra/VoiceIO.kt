@@ -27,9 +27,15 @@ class VoiceIO(private val ctx: Context, private val cb: Callback) {
         fun onSpeakDone()
         /** Arka plan ses tanıma çalışmadı; Google'ın ses penceresiyle denenmeli. */
         fun onNeedDialog()
+        /** Kullanıcıya kısa bilgi (ör. doğal ses kullanılamadı). */
+        fun onNotice(msg: String)
     }
 
     private val main = Handler(Looper.getMainLooper())
+    private val player = PcmPlayer()
+
+    @Volatile
+    private var speakGen = 0
     private var recognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private var ttsReady = false
@@ -193,9 +199,37 @@ class VoiceIO(private val ctx: Context, private val cb: Callback) {
         }
     }
 
-    fun isSpeaking() = tts?.isSpeaking == true
+    /** Gemini'nin doğal sesiyle konuş; olmazsa telefonun sesine dön. */
+    fun speakNatural(text: String, rate: Float, apiKey: String, voice: String) {
+        val t = cleanForSpeech(text)
+        if (t.isBlank()) {
+            main.post { cb.onSpeakDone() }
+            return
+        }
+        stopSpeaking()
+        val gen = speakGen
+        kotlin.concurrent.thread(name = "natural-voice") {
+            try {
+                val audio = NaturalVoice.synth(apiKey, t, voice)
+                if (gen != speakGen) return@thread
+                main.post { cb.onSpeakStart() }
+                player.playBlocking(audio, rate)
+                if (gen == speakGen) main.post { cb.onSpeakDone() }
+            } catch (e: Exception) {
+                if (gen != speakGen) return@thread
+                main.post {
+                    cb.onNotice("Doğal ses şu an kullanılamadı, telefonun sesiyle konuşuyorum. (${Gemini.friendly(e)})")
+                    speak(text, rate)
+                }
+            }
+        }
+    }
+
+    fun isSpeaking() = tts?.isSpeaking == true || player.playing
 
     fun stopSpeaking() {
+        speakGen++
+        player.stop()
         if (tts?.isSpeaking == true) tts?.stop()
     }
 

@@ -14,16 +14,17 @@ object Gemini {
     fun generate(
         apiKey: String,
         model: String,
-        system: String,
+        system: String?,
         contents: JSONArray,
-        tools: JSONArray?
+        tools: JSONArray?,
+        generationConfig: JSONObject? = null
     ): JSONObject {
         val m = URLEncoder.encode(model, "UTF-8")
         val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$m:generateContent")
-        val body = JSONObject()
-            .put("contents", contents)
-            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
+        val body = JSONObject().put("contents", contents)
+        if (system != null) body.put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
         if (tools != null) body.put("tools", tools)
+        if (generationConfig != null) body.put("generationConfig", generationConfig)
 
         val conn = url.openConnection() as HttpURLConnection
         try {
@@ -50,6 +51,36 @@ object Gemini {
         } finally {
             conn.disconnect()
         }
+    }
+
+    /** Seçili modeli dener; model yoksa (404) listedeki diğerlerine geçer ve çalışanı kaydeder. */
+    fun generateAuto(prefs: Prefs, system: String?, contents: JSONArray, tools: JSONArray?): JSONObject {
+        val first = prefs.model.ifBlank { Prefs.DEFAULT_MODEL }
+        val order = listOf(first) + Prefs.MODELS.filter { it != first }
+        var last: Throwable? = null
+        for (m in order) {
+            try {
+                val r = generate(prefs.apiKey, m, system, contents, tools)
+                if (m != first) prefs.model = m
+                return r
+            } catch (e: GeminiException) {
+                last = e
+                if (e.code != 404) throw e
+            }
+        }
+        throw last ?: GeminiException("Model bulunamadı", 404)
+    }
+
+    /** Cevaptaki düz metin parçalarını birleştirir (düşünce parçaları hariç). */
+    fun textOf(resp: JSONObject): String {
+        val parts = resp.optJSONArray("candidates")?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
+            ?: return ""
+        val sb = StringBuilder()
+        for (i in 0 until parts.length()) {
+            val p = parts.getJSONObject(i)
+            if (!p.optBoolean("thought", false) && p.has("text")) sb.append(p.getString("text"))
+        }
+        return sb.toString().trim()
     }
 
     /** Kullanıcıya gösterilecek anlaşılır hata metni. */

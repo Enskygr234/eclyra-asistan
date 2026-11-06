@@ -82,6 +82,8 @@ private val SUGGESTIONS = listOf(
     "Akşam 8'de ilaç içmemi hatırlat",
     "Spotify'da lo-fi çal",
     "En yakın eczaneye yol tarifi",
+    "Bugün dolar kaç?",
+    "Son mesajlarımı oku",
     "Bana bir fıkra anlat",
 )
 
@@ -89,6 +91,7 @@ private val SUGGESTIONS = listOf(
 fun ChatScreen(
     vm: AssistantViewModel,
     onSettings: () -> Unit,
+    onHistory: () -> Unit,
     onMic: () -> Unit,
     onCamera: () -> Unit,
     onGallery: () -> Unit,
@@ -132,9 +135,12 @@ fun ChatScreen(
                 Text("Eclyra", color = C.Text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.weight(1f))
                 if (!empty) {
-                    IconButton(onClick = { vm.clearChat() }) {
-                        Icon(painterResource(R.drawable.ic_delete), "Sohbeti temizle", tint = C.Muted)
+                    IconButton(onClick = { vm.newChat() }) {
+                        Icon(painterResource(R.drawable.ic_add), "Yeni sohbet", tint = C.Muted)
                     }
+                }
+                IconButton(onClick = onHistory) {
+                    Icon(painterResource(R.drawable.ic_history), "Sohbetler", tint = C.Muted)
                 }
                 IconButton(onClick = onSettings) {
                     Icon(painterResource(R.drawable.ic_settings), "Ayarlar", tint = C.Muted)

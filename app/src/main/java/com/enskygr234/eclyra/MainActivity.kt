@@ -28,6 +28,7 @@ import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
 import com.enskygr234.eclyra.ui.ChatScreen
 import com.enskygr234.eclyra.ui.EclyraTheme
+import com.enskygr234.eclyra.ui.HistoryScreen
 import com.enskygr234.eclyra.ui.SettingsScreen
 import java.io.File
 
@@ -42,6 +43,7 @@ class MainActivity : ComponentActivity() {
     private val vm: AssistantViewModel by viewModels()
     private var screen by mutableStateOf("chat")
     private var overlayGranted by mutableStateOf(false)
+    private var notifAccess by mutableStateOf(false)
     private var listenAfterPermission = false
     private var photoUri: Uri? = null
 
@@ -99,18 +101,22 @@ class MainActivity : ComponentActivity() {
         setContent {
             EclyraTheme {
                 BackHandler(enabled = screen != "chat") { screen = "chat" }
-                if (screen == "settings") {
+                if (screen == "history") {
+                    HistoryScreen(vm = vm, onBack = { screen = "chat" })
+                } else if (screen == "settings") {
                     SettingsScreen(
                         vm = vm,
                         onBack = { screen = "chat" },
                         onRequestPermissions = { permLauncher.launch(basePermissions) },
                         onRequestSms = { smsLauncher.launch(Manifest.permission.SEND_SMS) },
-                        overlayGranted = overlayGranted
+                        overlayGranted = overlayGranted,
+                        notifAccess = notifAccess
                     )
                 } else {
                     ChatScreen(
                         vm = vm,
                         onSettings = { screen = "settings" },
+                        onHistory = { screen = "history" },
                         onMic = { mic() },
                         onCamera = { camera() },
                         onGallery = {
@@ -165,6 +171,7 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         visible = true
         overlayGranted = Settings.canDrawOverlays(this)
+        notifAccess = NotifListener.hasAccess(this)
         // Uygulama açıkken arka plandaki dinleme mikrofonu bırakır
         if (vm.prefs.wakeWord && WakeModel.ready(this) && has(Manifest.permission.RECORD_AUDIO)) {
             WakeWordService.startPaused(this)
